@@ -1,6 +1,6 @@
 const express = require("express");
 const { Server } = require("socket.io");
-const PORT = 5000;
+const PORT = process.env.PORT || 5002;
 const app = express();
 const path = require("path");
 const http = require("http");
@@ -14,6 +14,10 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use((req, res, next) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).send("Healthy");
 });
 
 const userSocketMap = {};
@@ -84,6 +88,6 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT || 5002, () => {
+server.listen(PORT, () => {
   console.log(`Listening on port ${PORT}`);
 });
