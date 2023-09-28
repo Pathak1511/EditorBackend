@@ -1,6 +1,6 @@
 const express = require("express");
 const { Server } = require("socket.io");
-const PORT = 80;
+const PORT = 5000;
 const app = express();
 const path = require("path");
 const http = require("http");
@@ -84,6 +84,6 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT || 5002, () => {
   console.log(`Listening on port ${PORT}`);
 });
