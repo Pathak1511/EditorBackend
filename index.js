@@ -79,7 +79,7 @@ io.on("connection", (socket) => {
         socketId: socket.id,
         username: userSocketMap[socket.id],
       });
-      socket.in(id).emit(ACTIONS.CHAT, {
+      io.to(id).emit(ACTIONS.CHAT, {
         id: id,
         inputText: `${userSocketMap[socket.id]} left the chat`,
         userName: userSocketMap[socket.id],
