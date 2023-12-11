@@ -5,6 +5,8 @@ const app = express();
 const path = require("path");
 const http = require("http");
 const ACTIONS = require("./Actions");
+const axios = require("axios");
+
 // const execute = require("./script.mjs");
 
 const server = http.createServer(app);
@@ -23,32 +25,67 @@ app.get("/health", (req, res) => {
 const userSocketMap = {};
 let users = new Array();
 
-function getAllConnectedClients(id) {
+const getAllConnectedClients = async (id) => {
   // Map
-  return Array.from(io.sockets.adapter.rooms.get(id) || []).map((socketId) => {
-    return {
-      socketId,
-      username: userSocketMap[socketId],
-    };
-  });
-}
+
+  const data = await axios
+    .get("http://localhost:5500/v1/room/getAllMember", {
+      id: id,
+    })
+    .then((response) => {
+      return response.data.data;
+    })
+    .catch((error) => {
+      return null;
+    });
+
+  console.log(data);
+  // return Array.from(io.sockets.adapter.rooms.get(id) || []).map((socketId) => {
+  //   return {
+  //     socketId,
+  //     username: userSocketMap[socketId],
+  //   };
+  // });
+};
+
+// console.log(users);
+// [
+//   { id: '2tv3jUyd7MYa3kucAAAB', userName: 'Hritik' },
+//   { id: 'Tzv9merOkSDRwuTgAAAD', userName: 'Harijan' }
+// ]
 
 io.on("connection", (socket) => {
-  socket.on(ACTIONS.JOIN, ({ id, username }) => {
+  let clients = [];
+  socket.on(ACTIONS.JOIN, async ({ id, username }) => {
+    // Uploading data in mongodb
+    const data = await axios
+      .post("http://localhost:5500/v1/room/create_room", {
+        name: username,
+        room_id: id,
+        session_id: socket.id,
+      })
+      .then((response) => {
+        return response.data.content.data;
+      })
+      .catch((error) => {
+        return [];
+      });
+
     userSocketMap[socket.id] = username;
     users.push({ id: socket.id, userName: username });
     socket.join(id);
 
-    const clients = getAllConnectedClients(id);
-    clients.forEach(({ socketId }) => {
-      io.to(socketId).emit(ACTIONS.JOINED, {
+    const clients = data;
+    // getAllConnectedClients(id);
+    clients.forEach(({ session_id }) => {
+      io.to(session_id).emit(ACTIONS.JOINED, {
         clients,
         username,
         socketId: socket.id,
       });
 
-      io.to(socketId).emit(ACTIONS.CHAT, {
-        id: socketId,
+      io.to(session_id).emit(ACTIONS.CHAT, {
+        id: session_id,
         inputText: `${username} joined the chat`,
         userName: username,
         isJoined: true,
@@ -74,6 +111,7 @@ io.on("connection", (socket) => {
   // Broadcating while user is disconnecting
   socket.on("disconnecting", () => {
     const rooms = [...socket.rooms];
+
     rooms.forEach((id) => {
       socket.in(id).emit(ACTIONS.DISCONNECTED, {
         socketId: socket.id,
@@ -86,6 +124,17 @@ io.on("connection", (socket) => {
         isJoined: true,
       });
     });
+
+    axios
+      .post("http://localhost:5500/v1/room/leave_room", {
+        session_id: socket.id,
+      })
+      .then((response) => {
+        console.log("Server Response Successfull");
+      })
+      .catch((error) => {
+        console.error("Error occured");
+      });
 
     delete userSocketMap[socket.id];
     users = users.filter((user) => user.id !== socket.id);
