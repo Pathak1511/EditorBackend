@@ -94,8 +94,8 @@ io.on("connection", (socket) => {
   });
 
   // Code change event
-  socket.on(ACTIONS.CODE_CHANGE, ({ id, code }) => {
-    socket.in(id).emit(ACTIONS.CODE_CHANGE, { code });
+  socket.on(ACTIONS.CODE_CHANGE, ({ id, currentTabId, code }) => {
+    socket.in(id).emit(ACTIONS.CODE_CHANGE, { currentTabId, code });
   });
 
   socket.on(ACTIONS.CHAT, (msg) => {
