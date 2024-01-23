@@ -13,6 +13,16 @@ const server = http.createServer(app);
 
 const io = new Server(server);
 
+function getAllConnectedClients(id) {
+  // Map
+  return Array.from(io.sockets.adapter.rooms.get(id) || []).map((socketId) => {
+    return {
+      socketId,
+      username: userSocketMap[socketId],
+    };
+  });
+}
+
 app.use(express.static("public"));
 app.use((req, res, next) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -23,69 +33,22 @@ app.get("/health", (req, res) => {
 });
 
 const userSocketMap = {};
-let users = new Array();
-
-const getAllConnectedClients = async (id) => {
-  // Map
-
-  const data = await axios
-    .get("http://localhost:5500/v1/room/getAllMember", {
-      id: id,
-    })
-    .then((response) => {
-      return response.data.data;
-    })
-    .catch((error) => {
-      return null;
-    });
-
-  console.log(data);
-  // return Array.from(io.sockets.adapter.rooms.get(id) || []).map((socketId) => {
-  //   return {
-  //     socketId,
-  //     username: userSocketMap[socketId],
-  //   };
-  // });
-};
-
-// console.log(users);
-// [
-//   { id: '2tv3jUyd7MYa3kucAAAB', userName: 'Hritik' },
-//   { id: 'Tzv9merOkSDRwuTgAAAD', userName: 'Harijan' }
-// ]
 
 io.on("connection", (socket) => {
-  let clients = [];
   socket.on(ACTIONS.JOIN, async ({ id, username }) => {
-    // Uploading data in mongodb
-    const data = await axios
-      .post("http://localhost:5500/v1/room/create_room", {
-        name: username,
-        room_id: id,
-        session_id: socket.id,
-      })
-      .then((response) => {
-        return response.data.content.data;
-      })
-      .catch((error) => {
-        return [];
-      });
-
     userSocketMap[socket.id] = username;
-    users.push({ id: socket.id, userName: username });
     socket.join(id);
+    const clients = getAllConnectedClients(id);
 
-    const clients = data;
-    // getAllConnectedClients(id);
-    clients.forEach(({ session_id }) => {
-      io.to(session_id).emit(ACTIONS.JOINED, {
+    clients.forEach(({ socketId }) => {
+      io.to(socketId).emit(ACTIONS.JOINED, {
         clients,
         username,
         socketId: socket.id,
       });
 
-      io.to(session_id).emit(ACTIONS.CHAT, {
-        id: session_id,
+      io.to(socketId).emit(ACTIONS.CHAT, {
+        id: socketId,
         inputText: `${username} joined the chat`,
         userName: username,
         isJoined: true,
@@ -99,8 +62,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on(ACTIONS.CHAT, (msg) => {
-    users.map((user) => {
-      io.to(user.id).emit(ACTIONS.CHAT, msg, user.userName);
+    const clients = getAllConnectedClients(msg.room_id);
+    clients.forEach(({ socketId, username }) => {
+      io.to(socketId).emit(ACTIONS.CHAT, msg, username);
     });
   });
 
@@ -137,8 +101,6 @@ io.on("connection", (socket) => {
       });
 
     delete userSocketMap[socket.id];
-    users = users.filter((user) => user.id !== socket.id);
-
     socket.leave();
   });
 });
