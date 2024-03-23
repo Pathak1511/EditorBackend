@@ -4,7 +4,8 @@
   "description": "Test service communication",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "prod": "nodemon index.js"
   },
   "author": "Hritik Pathak",
   "license": "ISC",

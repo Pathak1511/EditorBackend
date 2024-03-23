@@ -18,7 +18,8 @@ function getAllConnectedClients(id) {
   return Array.from(io.sockets.adapter.rooms.get(id) || []).map((socketId) => {
     return {
       socketId,
-      username: userSocketMap[socketId],
+      username: userSocketMap[socketId].username,
+      admin: userSocketMap[socketId].admin,
     };
   });
 }
@@ -36,15 +37,20 @@ const userSocketMap = {};
 
 io.on("connection", (socket) => {
   socket.on(ACTIONS.JOIN, async ({ id, username }) => {
-    userSocketMap[socket.id] = username;
+    if (Object.keys(userSocketMap).length !== 0) {
+      userSocketMap[socket.id] = { username, admin: false };
+    } else {
+      userSocketMap[socket.id] = { username, admin: true };
+    }
     socket.join(id);
     const clients = getAllConnectedClients(id);
 
-    clients.forEach(({ socketId }) => {
+    clients.forEach(({ socketId, admin }) => {
       io.to(socketId).emit(ACTIONS.JOINED, {
         clients,
         username,
         socketId: socket.id,
+        admin: admin,
       });
 
       io.to(socketId).emit(ACTIONS.CHAT, {
@@ -57,8 +63,50 @@ io.on("connection", (socket) => {
   });
 
   // Code change event
-  socket.on(ACTIONS.CODE_CHANGE, ({ id, currentTabId, code }) => {
-    socket.in(id).emit(ACTIONS.CODE_CHANGE, { currentTabId, code });
+  socket.on(ACTIONS.CODE_CHANGE, ({ id, currentTabId, code, owner }) => {
+    socket.in(id).emit(ACTIONS.CODE_CHANGE, {
+      adminId: socket.id,
+      currentTabId,
+      code,
+      owner,
+    });
+  });
+
+  socket.on(ACTIONS.ADMIN_ACCESS, (data) => {
+    io.emit(ACTIONS.ADMIN_ACCESS, data);
+    const clients = getAllConnectedClients(data.data[0].room_id);
+
+    clients.forEach(({ socketId, admin }) => {
+      io.to(socketId).emit(ACTIONS.CHAT, {
+        id: socketId,
+        inputText: `${data.data[0].userName} request Room Admin access`,
+        userName: data.data[0].userName,
+        isJoined: true,
+      });
+    });
+  });
+
+  socket.on(ACTIONS.SEND_DECLINE, ({ room_id, userName, msg }) => {
+    const clients = getAllConnectedClients(room_id);
+
+    clients.forEach(({ socketId, admin }) => {
+      io.to(socketId).emit(ACTIONS.CHAT, {
+        id: socketId,
+        inputText: msg,
+        userName: userName,
+        isJoined: true,
+      });
+    });
+  });
+
+  socket.on(ACTIONS.REFERESH, ({ room_id }) => {
+    const clients = getAllConnectedClients(room_id);
+
+    clients.forEach(({ socketId, admin }) => {
+      io.to(socketId).emit(ACTIONS.REFERESH, {
+        room_id,
+      });
+    });
   });
 
   socket.on(ACTIONS.CHAT, (msg) => {
@@ -79,8 +127,9 @@ io.on("connection", (socket) => {
     rooms.forEach((id) => {
       socket.in(id).emit(ACTIONS.DISCONNECTED, {
         socketId: socket.id,
-        username: userSocketMap[socket.id],
+        username: userSocketMap[socket.id]?.username,
       });
+
       io.to(id).emit(ACTIONS.CHAT, {
         id: id,
         inputText: `${userSocketMap[socket.id]} left the chat`,
@@ -89,16 +138,16 @@ io.on("connection", (socket) => {
       });
     });
 
-    axios
-      .post("http://localhost:5500/v1/room/leave_room", {
-        session_id: socket.id,
-      })
-      .then((response) => {
-        console.log("Server Response Successfull");
-      })
-      .catch((error) => {
-        console.error("Error occured");
-      });
+    // axios
+    //   .post("http://localhost:5500/v1/room/leave_room", {
+    //     session_id: socket.id,
+    //   })
+    //   .then((response) => {
+    //     console.log("Server Response Successfull");
+    //   })
+    //   .catch((error) => {
+    //     console.error("Error occured");
+    //   });
 
     delete userSocketMap[socket.id];
     socket.leave();
